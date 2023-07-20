@@ -1,0 +1,173 @@
+version: "3.3"
+services:
+  php:
+    container_name:
+      ${PHP_VERSION}
+    build:
+      ./${PHP_VERSION}
+    restart:
+      always
+    ports:
+      - 9000:${PHP_PORT}
+    volumes:
+      - ${ENVIRONMENT}${PROJECT_ROOT}:/www
+      - ${ENVIRONMENT}${PHP_VERSION}/php.ini:/usr/local/etc/php/php.ini
+      - ${ENVIRONMENT}${PHP_VERSION}/php-fpm.conf:/usr/local/etc/php/php-fpm.conf
+      - ${ENVIRONMENT}${PHP_VERSION}/php-fpm.d:/usr/local/etc/php/php-fpm.d
+      - ${ENVIRONMENT}${SUPERVISOR_VERSION}/supervisord.conf:/etc/supervisor/supervisord.conf
+      - ${ENVIRONMENT}${SUPERVISOR_VERSION}/log:/var/log/supervisor
+    depends_on:
+      - mysql
+      - redis
+      - mongo
+      - postgres
+      - rabbitmq
+
+  mysql:
+    container_name:
+      ${MYSQL_VERSION}
+    build:
+      ./${MYSQL_VERSION}
+    restart:
+      always
+    ports:
+      - 3306:${MYSQL_PORT}
+    volumes:
+      - ${ENVIRONMENT}${MYSQL_VERSION}/data:/var/lib/mysql
+      - ${ENVIRONMENT}${MYSQL_VERSION}/my.cnf:/etc/my.cnf
+      - ${ENVIRONMENT}${MYSQL_VERSION}/logs:/var/logs
+    command:
+      --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+  nginx:
+    container_name:
+      ${NGINX_VERSION}
+    build:
+      ./${NGINX_VERSION}
+    restart:
+      always
+    ports:
+      - 80:${NGINX_PORT}
+    volumes:
+      - ${ENVIRONMENT}${PROJECT_ROOT}:/www
+      - ${ENVIRONMENT}${NGINX_VERSION}/logs:/etc/nginx/logs/
+      - ${ENVIRONMENT}${NGINX_VERSION}:/etc/nginx/
+    depends_on:
+      - php
+
+  redis:
+    container_name:
+      ${REDIS_VERSION}
+    build:
+      ./${REDIS_VERSION}
+    restart:
+      always
+    ports:
+      - 6379:${REDIS_PORT}
+    volumes:
+      - ${ENVIRONMENT}${REDIS_VERSION}/data:/data
+      - ${ENVIRONMENT}${REDIS_VERSION}/redis.conf:/usr/local/etc/redis.conf
+      - ${ENVIRONMENT}${REDIS_VERSION}/logs:/var/logs
+
+  mongo:
+    container_name:
+      ${MONGO_VERSION}
+    build:
+      ./${MONGO_VERSION}
+    restart:
+      always
+    ports:
+      - 27017:${MONGO_PORT}
+    volumes:
+      - ${ENVIRONMENT}${MONGO_VERSION}/data:/data/db
+      - ${ENVIRONMENT}${MONGO_VERSION}/mongod.conf:/etc/mongod.conf
+      - ${ENVIRONMENT}${MONGO_VERSION}/logs:/var/logs
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+
+  postgres:
+    container_name:
+      ${POSTGRES_VERSION}
+    build:
+      ./${POSTGRES_VERSION}
+    restart:
+      always
+    ports:
+      - 5432:${POSTGRES_PORT}
+    volumes:
+      - ${ENVIRONMENT}${POSTGRES_VERSION}/data:/var/lib/postgresql/data
+      - ${ENVIRONMENT}${POSTGRES_VERSION}/logs:/var/logs
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      POSTGRES_INITDB_WALDIR: /var/logs
+      PGDATA: /var/lib/postgresql/data
+
+  rabbitmq:
+    container_name:
+      ${RABBITMQ_VERSION}
+    build:
+      ./${RABBITMQ_VERSION}
+    restart:
+      always
+    ports:
+      - 5672:${RABBITMQ_PORT_PROGRAM}
+      - 15672:${RABBITMQ_PORT_ADMIN}
+    volumes:
+      - ${ENVIRONMENT}${RABBITMQ_VERSION}/data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+
+  elasticsearch:
+    container_name:
+      ${ELASTICSEARCH_VERSION}
+    build:
+      ./${ELK_DIRECTORY}${ELASTICSEARCH_VERSION}
+    restart:
+      always
+    ports:
+      - 9200:${ELASTICSEARCH_PORT_HTTP}
+      - 9300:${ELASTICSEARCH_PORT_TCP}
+    volumes:
+      - ${ENVIRONMENT}${ELK_DIRECTORY}${ELASTICSEARCH_VERSION}/data:/usr/share/elasticsearch/data
+      - ${ENVIRONMENT}${ELK_DIRECTORY}${ELASTICSEARCH_VERSION}/elasticsearch.yml:/usr/share/elasticsearch/elasticsearch.yml
+    environment:
+      - discovery.type=${ELASTICSEARCH_DISCOVERY_TYPE}
+      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS}
+      - cluster.name=${ELASTICSEARCH_CLUSTER_NAME}
+  kibana:
+    container_name:
+      ${KIBANA_VERSION}
+    build:
+      ./${ELK_DIRECTORY}${KIBANA_VERSION}
+    ports:
+      - 5601:${KIBANA_PORT}
+    volumes:
+      - ${ENVIRONMENT}${ELK_DIRECTORY}${KIBANA_VERSION}/kibana.yml:/usr/share/kibana/kibana.yml:rw
+    environment:
+      - elasticsearch.hosts=${ELK_HOSTS}/${ELASTICSEARCH_PORT_HTTP}
+    depends_on:
+      - elasticsearch
+
+  logstash:
+    container_name:
+      ${LOGSTASH_VERSION}
+    build:
+      ./${ELK_DIRECTORY}${LOGSTASH_VERSION}
+    restart:
+      always
+    ports:
+      - 4560:${LOGSTASH_PORT}
+    volumes:
+      - ${ENVIRONMENT}${ELK_DIRECTORY}${LOGSTASH_VERSION}/logstash.conf:/usr/share/logstash/logstash.conf
+    links:
+      - elasticsearch:${ELK_HOSTS}
+    depends_on:
+      - elasticsearch
+      - kibana
+networks:
+  services:
